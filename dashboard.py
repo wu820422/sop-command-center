@@ -101,6 +101,11 @@ with col_title:
 with col_btn:
     scan_clicked = st.button("🔄 立即全域掃描", use_container_width=True, type="primary")
 
+# 自動監控開關
+col_auto, col_empty = st.columns([1, 3])
+with col_auto:
+    auto_run = st.toggle("🚀 啟用自動監控 (每 30 秒刷新)", value=False)
+
 # 狀態顯示列 (四欄佈局)
 phase, thresholds = commander.get_market_status()
 m1, m2, m3, m4 = st.columns(4)
@@ -121,21 +126,28 @@ st.markdown("---")
 # ==========================================
 # 5. 掃描邏輯與表格渲染 (核心戰場)
 # ==========================================
-if scan_clicked:
+# 觸發條件：按下按鈕 OR 自動開關被打開
+if scan_clicked or auto_run:
     results = []
-    progress_text = "🛰️ 衛星連線中... 正在掃描 20 檔標的"
-    my_bar = st.progress(0, text=progress_text)
+    
+    # 如果是自動跑，就不顯示進度條干擾視線
+    if not auto_run:
+        progress_text = "🛰️ 衛星連線中... 正在掃描 20 檔標的"
+        my_bar = st.progress(0, text=progress_text)
 
     # 模擬母股 Gate (僅用於 Demo)
     def mock_stock_gate(sym):
-        # 讓 NVDA 必過
         if sym == "NVDA":
             return True, "H2 結構成立 (Demo)"
         return random.choice([True, False]), random.choice(["H2", "Trap", "Middle", "Barb Wire"])
 
     # --- 掃描迴圈 ---
     for i, symbol in enumerate(TICKERS):
-        my_bar.progress((i + 1) / len(TICKERS), text=f"正在分析: {symbol}...")
+        if not auto_run:
+            my_bar.progress((i + 1) / len(TICKERS), text=f"正在分析: {symbol}...")
+        else:
+            # 自動模式下在右上角顯示進度
+            st.caption(f"🔄 正在分析: {symbol}...")
 
         # 初始化變數
         stock_pass = False
@@ -149,28 +161,22 @@ if scan_clicked:
 
         # --- A. 取得母股狀態 ---
         if DEMO_MODE:
-            # [模擬模式]
             stock_pass, stock_msg = mock_stock_gate(symbol)
             current_price_display = f"${random.uniform(100, 300):.2f}"
-            stock_pct = 0.005  # 假裝漲 0.5%
+            stock_pct = 0.005
         else:
-            # [實戰模式] - 接你的真實邏輯
-            # 這裡假設你已經整合了 check_stock_sop，若無則暫時全過，靠期權過濾
-            stock_pass = True  # 實戰時請替換為真實 SOP 函數
+            stock_pass = True
             stock_msg = "SOP 檢查中"
-            # 嘗試抓現價
             real_price = radar._get_current_price()
             if real_price:
                 current_price_display = f"${real_price:.2f}"
             else:
                 current_price_display = "N/A"
-            stock_pct = 0.002  # 實戰需計算真實漲跌幅
+            stock_pct = 0.002
 
         # --- B. 取得期權狀態 (Gate 2) ---
         if stock_pass:
-            # 只有母股過了才開雷達
             if DEMO_MODE:
-                # [模擬] 讓 NVDA 拿到期權
                 if symbol == "NVDA":
                     option_pass = True
                     option_msg = "🚀 強力跟隨 (+5.2%)"
@@ -180,7 +186,6 @@ if scan_clicked:
                     option_msg = "🚀 跟隨" if option_pass else "⚠️ 價差過大"
                     atm_info = "Call ATM"
             else:
-                # [實戰]
                 contract, msg = radar.get_atm_call()
                 if contract is not None:
                     atm_info = f"{contract['contractSymbol']} (${contract['lastPrice']})"
@@ -190,7 +195,6 @@ if scan_clicked:
                 else:
                     option_msg = msg
         else:
-            # 母股沒過，期權直接略過
             if not DEMO_MODE:
                 stock_msg = "BLOCK (Middle/LowVol)"
 
@@ -201,7 +205,6 @@ if scan_clicked:
         )
 
         # --- D. 整理數據 ---
-        # 計算排序權重 (A=3, C=2, BLOCK=1) 用於置頂 A 級
         score = 0
         if "A 級" in grade:
             score = 3
@@ -218,11 +221,14 @@ if scan_clicked:
             "期權狀態": option_msg,
             "ATM合約": atm_info,
             "理由": reason,
-            "_Score": score  # 隱藏排序欄位
+            "_Score": score
         })
 
-    # 清空進度條
-    my_bar.empty()
+        # 小延遲避免被封
+        time.sleep(0.05)
+
+    if not auto_run:
+        my_bar.empty()
 
     # 轉 DataFrame 並排序
     df = pd.DataFrame(results)
@@ -241,25 +247,21 @@ if scan_clicked:
     # 6. 表格樣式美化 (Pandas Styler)
     # ==========================================
     def highlight_rows(row):
-        """根據評級改變整行背景顏色 (戰術夜視風格)"""
         grade = row["評級"]
         styles = [''] * len(row)
         if "A 級" in grade:
-            # 🟩 亮綠背景 + 深綠字 (最顯眼)
             return ['background-color: #0c3818; color: #a3ffac; font-weight: bold; border-bottom: 1px solid #1e5c2b'] * len(row)
         elif "C 級" in grade:
-            # 🟨 暗黃背景 + 亮黃字
             return ['background-color: #38300c; color: #ffdf75; border-bottom: 1px solid #5c4f14'] * len(row)
         elif "BLOCK" in grade:
-            # 🟥 暗紅/灰背景 + 淡紅字 (低調處理)
             return ['background-color: #2d1b1e; color: #8a5a5f; opacity: 0.7'] * len(row)
         return styles
 
     # 顯示戰術表格
     st.dataframe(
-        df.style.apply(highlight_rows, axis=1),  # 應用整行變色
+        df.style.apply(highlight_rows, axis=1),
         use_container_width=True,
-        height=800,  # 拉長表格高度
+        height=800,
         column_config={
             "代號": st.column_config.TextColumn("代號", help="股票代碼", width="small"),
             "現價": st.column_config.TextColumn("現價", width="small"),
@@ -267,13 +269,18 @@ if scan_clicked:
             "ATM合約": st.column_config.TextColumn("ATM 期權", width="medium"),
             "理由": st.column_config.TextColumn("詳細理由", width="large"),
         },
-        hide_index=True  # 隱藏索引列
+        hide_index=True
     )
+
+    # === ✨ 自動刷新邏輯 ===
+    if auto_run:
+        st.caption(f"🔄 系統將在 30 秒後自動刷新... (最後更新: {time.strftime('%H:%M:%S')})")
+        time.sleep(30)
+        st.rerun()
 
 else:
     # 待機畫面
-    st.info("👋 指揮官，系統就緒。請點擊右上角「立即全域掃描」啟動衛星。")
-    st.caption("提示：初次使用請確保 DEMO_MODE = True 以測試 UI 效果。")
+    st.info("👋 指揮官，系統就緒。請點擊「立即全域掃描」或開啟「自動監控」。")
 
 # 底部版權/狀態
 st.markdown("---")
