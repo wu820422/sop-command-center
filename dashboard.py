@@ -28,7 +28,7 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. CSS 黑科技 (黑暗指揮官風格)
+# 2. CSS 黑科技 (黑暗指揮官風格 - 修正版)
 # ==========================================
 st.markdown("""
 <style>
@@ -36,10 +36,21 @@ st.markdown("""
 .stApp {
     background-color: #0E1117;
 }
-/* 調整頂部留白 */
+/* 1. 調整頂部留白 (關鍵修正) */
 .block-container {
-    padding-top: 1rem;
+    padding-top: 3.5rem;
     padding-bottom: 2rem;
+}
+/* 2. 隱藏 Streamlit 預設的漢堡選單與頂部彩條 */
+header {
+    visibility: hidden;
+}
+header:hover {
+    visibility: visible;
+}
+/* 3. 隱藏底部的 "Made with Streamlit" */
+footer {
+    visibility: hidden;
 }
 /* 指標卡片 (Metric Cards) */
 div[data-testid="stMetric"] {
@@ -87,8 +98,6 @@ TICKERS = [
 col_title, col_btn = st.columns([4, 1])
 with col_title:
     st.markdown("## 🛡️ SOP 防線官 - 美股戰情室")
-    if DEMO_MODE:
-        st.caption("⚠️ 目前為【演習模式 (DEMO)】，顯示模擬數據。請將代碼中 DEMO_MODE 改為 False 進入實戰。")
 with col_btn:
     scan_clicked = st.button("🔄 立即全域掃描", use_container_width=True, type="primary")
 
