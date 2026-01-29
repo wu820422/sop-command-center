@@ -15,7 +15,7 @@ from dual_core_logic import DualCoreCommander
 # ==========================================
 # True = 使用模擬數據測試 UI (讓你看綠光特效)
 # False = 連接真實 OptionRadar/SOP (實戰模式)
-DEMO_MODE = True
+DEMO_MODE = False
 
 # ==========================================
 # 1. 頁面初始化 (必須在第一行)
